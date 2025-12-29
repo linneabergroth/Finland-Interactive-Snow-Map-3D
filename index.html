@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finland 3D Climate Visualization - Real FMI Data</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050507; font-family: 'Inter', sans-serif; color: white; }
+        canvas { display: block; }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .control-panel {
+            pointer-events: auto;
+            background: rgba(15, 15, 20, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            border-radius: 16px;
+            width: 340px;
+        }
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            pointer-events: auto;
+            background: rgba(15, 15, 20, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px;
+            border-radius: 12px;
+            width: 180px;
+            z-index: 10;
+        }
+        .citation {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            tracking-widest;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        .citation a:hover { color: #3b82f6; }
+        .gradient-bar {
+            height: 12px;
+            width: 100%;
+            border-radius: 6px;
+            margin: 12px 0;
+        }
+        .loading-screen {
+            position: fixed;
+            inset: 0;
+            background: #050507;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.8s ease;
+        }
+        .progress-bar {
+            width: 200px;
+            height: 4px;
+            background: rgba(59, 130, 246, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+        #year-overlay {
+            position: absolute;
+            left: 50px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 8rem;
+            font-weight: 900;
+            color: rgba(59, 130, 246, 0.15);
+            pointer-events: none;
+            display: none;
+            font-family: 'Monospace';
+        }
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #27272a;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px; width: 16px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #3b82f6; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        
+        #reliefToggleContainer {
+            display: none; /* Hidden by default */
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 280px;
+            background-color: rgba(15, 15, 20, 0.95);
+            color: #fff;
+            text-align: left;
+            border-radius: 8px;
+            padding: 12px;
+            position: absolute;
+            z-index: 1000;
+            top: 100%;
+            left: 0;
+            margin-top: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 11px;
+            line-height: 1.5;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            bottom: 100%;
+            left: 10px;
+            margin-bottom: 0px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent transparent rgba(15, 15, 20, 0.95) transparent;
+        }
+        
+        /* Top Title */
+        #top-title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #ffffff;
+            pointer-events: none;
+            z-index: 100;
+            letter-spacing: 0.05em;
+        }
+        
+        /* Help Icon */
+        #help-icon {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: rgba(59, 130, 246, 0.2);
+            border: 2px solid rgba(59, 130, 246, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: help;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+        
+        #help-icon:hover {
+            background-color: rgba(59, 130, 246, 0.4);
+            border-color: rgba(59, 130, 246, 0.8);
+        }
+        
+        #help-icon span {
+            color: #3b82f6;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .help-tooltip {
+            visibility: hidden;
+            width: 320px;
+            background-color: rgba(15, 15, 20, 0.95);
+            color: #fff;
+            text-align: left;
+            border-radius: 8px;
+            padding: 14px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 11px;
+            line-height: 1.6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        }
+        
+        #help-icon:hover .help-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .help-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 20px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: rgba(15, 15, 20, 0.95) transparent transparent transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Title -->
+    <div id="top-title">Finland Jan-Feb Snow (1990-2025)</div>
+    
+    <!-- Help Icon -->
+    <div id="help-icon">
+        <span>?</span>
+        <div class="help-tooltip">
+            <strong>What:</strong> 3D temporal visualization (X: longitude, Y: latitude, Z: time) of winter snow metrics in Finland (sampled from <a href="https://en.ilmatieteenlaitos.fi/download-observations" target="_blank" style="color: #3b82f6; text-decoration: underline;">FMI</a>)<br><br>
+            <strong>Where:</strong> Finland <br><br>
+            <strong>When:</strong> January-February winter-period, across 1990-2025 (36 years)<br><br>
+            <strong>Metrics:</strong><br>
+            • <strong>MWD</strong> - Mean Winter Depth: snow depth in cm averaged per year period<br>
+            • <strong>SCD</strong> - Snow Cover Duration: number of days with snow depth ≥ h<sub>min</sub> cm per period <br>
+            <br>
+            <strong>How:</strong> Each horizontal layer = one year. Colors show metric intensity. Vertical axis = time (1990-2025)<br><br>
+            <strong>Libraries:</strong> Three.js (3D rendering) and D3.js (color scales)
+        </div>
+    </div>
+
+    <div id="loading" class="loading-screen">
+        <h1 class="text-3xl font-bold mb-4 tracking-tighter text-blue-500">Finland Jan-Feb Snow 3D (1990-2025)</h1>
+        <p id="loading-text" class="text-xs uppercase tracking-widest text-zinc-500">Initializing Core...</p>
+        <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+    </div>
+
+    <div id="year-overlay">1990</div>
+
+    <div id="ui-layer">
+        <div class="control-panel shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] uppercase tracking-widest text-zinc-500">Temporal Animation</span>
+                    <label class="switch">
+                        <input type="checkbox" id="animateToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
+                    Metric 
+                    <span class="tooltip" style="margin-left: 4px;">
+                        <span style="color: #3b82f6; font-size: 10px;">ⓘ</span>
+                        <span class="tooltiptext">
+                            <strong>Snow Cover Duration (SCD):</strong> Number of days with current snow depth ≥ h<sub>min</sub> cm over Jan-Feb.<br>
+                            <em>Slider controls h<sub>min</sub> threshold (cm).</em><br><br>
+                            <strong>Mean Winter Snow Depth (MWD):</strong> Average snow depth in cm over whole Jan-Feb period.<br>
+                            <em>Slider filters areas with MWD below the selected depth (cm).</em>
+                        </span>
+                    </span>
+                </label>
+                <select id="metricSelector" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-white text-sm cursor-pointer">
+                    <option value="mwd" selected>Mean Winter Snow Depth [cm]</option>
+                    <option value="scd">Snow Cover Duration [#days]</option>
+        
+                </select>
+            </div>
+
+            <!-- SCD: Minimum Snow Depth (hmin) -->
+            <div class="mb-4" id="hminSliderContainer" style="display: none;">
+                <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex justify-between">
+                    H_min: Snow Depth (cm) <span id="hminVal" class="text-blue-400 font-mono">20 cm</span>
+                </label>
+                <input type="range" id="hminSlider" min="0" max="50" value="20" step="5" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+            </div>
+            
+            <!-- MWD: Depth Threshold -->
+            <div class="mb-4" id="mwdThresholdContainer">
+                <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex justify-between">
+                    Snow Depth Threshold [cm] <span id="mwdThresholdVal" class="text-blue-400 font-mono">15 cm</span>
+                </label>
+                <input type="range" id="mwdThresholdSlider" min="0" max="100" value="15" step="1" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+            </div>
+
+            <div class="mb-6" id="yearSliderContainer" style="display: none;">
+                <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex justify-between">
+                    Current Year <span id="activeYearLabel" class="text-blue-400 font-mono">1990</span>
+                </label>
+                <input type="range" id="yearSlider" min="0" max="35" value="0" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-white/5">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3" id="stationCountContainer" style="display: none;">
+                        <div class="w-4 h-[2px] bg-zinc-700"></div>
+                        <p class="text-[11px] text-zinc-400" id="station-count">0 FMI Stations</p>
+                    </div>
+                    <button id="centerView" class="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition-colors ml-auto">
+                        Center View
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="legend" id="legend">
+        <div class="text-[10px] uppercase tracking-widest font-bold mb-1 text-zinc-400" id="legendTitle">Mean Winter Depth</div>
+        <div id="gradient" class="gradient-bar"></div>
+        <div class="flex justify-between text-[10px] font-mono text-zinc-400 mb-3">
+            <span id="legendMin">0 cm</span>
+            <span id="legendMax">100 cm</span>
+        </div>
+        
+        <!-- Threshold Info -->
+        <div class="mb-3 pb-3 border-b border-white/10">
+            <div class="text-[9px] uppercase tracking-widest text-zinc-500 mb-1">Display Filter</div>
+            <div class="text-[10px] text-zinc-300" id="legendThreshold">Showing depth ≥ 5 cm</div>
+        </div>
+        
+        <!-- Relief Toggle: Only visible during Animation -->
+        <div id="reliefToggleContainer" class="pt-3 border-t border-white/10 flex items-center justify-between">
+            <span class="text-[9px] uppercase tracking-widest text-zinc-500">Show Relief</span>
+            <label class="switch">
+                <input type="checkbox" id="heightToggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+        
+        <!-- Station Toggle: Only visible during Animation -->
+        <div id="stationToggleContainer" class="pt-3 border-t border-white/10 flex items-center justify-between" style="display: none;">
+            <span class="text-[9px] uppercase tracking-widest text-zinc-500">Show Stations</span>
+            <label class="switch">
+                <input type="checkbox" id="stationToggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <div class="citation">
+        Source: <a href="https://en.ilmatieteenlaitos.fi/download-observations" target="_blank">Finnish Meteorological Institute (FMI)</a>
+    </div>
+
+    <script>
+    const EXTRA_TERRAIN_POINTS = [
+        // --- THE HIGH NORTH (Käsivarsi / The Arm) ---
+        // These create the dramatic "spike" in the northwest
+        { name: "Halti", lat: 69.309, lon: 21.278, alt: 1324 }, // Highest point in Finland
+        { name: "Ridnitšohkka", lat: 69.288, lon: 21.353, alt: 1317 }, // Highest peak entirely in Finland
+        { name: "Kovddoskaisi", lat: 69.240, lon: 21.190, alt: 1240 },
+        { name: "Saana", lat: 69.043, lon: 20.859, alt: 1029 }, // Iconic shape
+        { name: "Meekonvaara", lat: 69.150, lon: 21.660, alt: 1019 },
+
+        // --- NORTHERN FELLS (Lapland Ranges) ---
+        // These create the rolling fell landscape
+        { name: "Taivaskero (Pallas)", lat: 68.073, lon: 24.057, alt: 809 },
+        { name: "Sokosti (Saariselkä)", lat: 68.212, lon: 28.163, alt: 718 },
+        { name: "Ylläs", lat: 67.564, lon: 24.223, alt: 719 },
+        { name: "Outtakka (Ounastunturi)", lat: 68.233, lon: 23.827, alt: 723 },
+        { name: "Pyhätunturi (Pelkosenniemi)", lat: 67.014, lon: 27.148, alt: 540 },
+        { name: "Aakenustunturi", lat: 67.690, lon: 24.460, alt: 565 },
+        { name: "Levi", lat: 67.800, lon: 24.800, alt: 531 },
+        { name: "Ruka", lat: 66.165, lon: 29.151, alt: 492 },
+        { name: "Kiilopää", lat: 68.340, lon: 27.460, alt: 546 },
+        { name: "Guivi (Kevo)", lat: 69.610, lon: 26.630, alt: 641 },
+
+        // --- EASTERN HIGHLANDS (Kainuu/Karelia) ---
+        // Important to show the rise towards the Russian border
+        { name: "Ukko-Koli", lat: 63.093, lon: 29.802, alt: 347 }, // Highest in southern half
+        { name: "Vuokatti", lat: 64.130, lon: 28.270, alt: 326 },
+        { name: "Iso-Syöte", lat: 65.630, lon: 27.600, alt: 432 },
+        { name: "Riisitunturi", lat: 66.216, lon: 28.567, alt: 465 },
+
+        // --- SOUTHERN RIDGES & HILLS ---
+        // Without these, the south looks completely flat
+        { name: "Tiirismaa (Hollola)", lat: 61.003, lon: 25.522, alt: 223 }, // Highest in South Finland
+        { name: "Kammiovuori (Sysmä)", lat: 61.630, lon: 25.680, alt: 221 },
+        { name: "Eerikkala", lat: 62.150, lon: 24.200, alt: 210 },
+        // Salpausselkä Ridges (create the distinct "rim" of the lake district)
+        { name: "Salpausselkä I (Lahti)", lat: 60.980, lon: 25.640, alt: 150 }, 
+        { name: "Salpausselkä I (Lohja)", lat: 60.250, lon: 24.060, alt: 100 },
+        { name: "Salpausselkä II (Vääksy)", lat: 61.170, lon: 25.530, alt: 130 },
+
+        // --- LAKE ANCHORS (The "Valleys") ---
+        // Crucial: Forces the terrain DOWN in the middle of the country
+        { name: "Saimaa Surface", lat: 61.500, lon: 28.000, alt: 76 },
+        { name: "Saimaa North", lat: 62.200, lon: 28.500, alt: 76 },
+        { name: "Päijänne Surface", lat: 61.500, lon: 25.500, alt: 78 },
+        { name: "Päijänne North", lat: 62.000, lon: 25.700, alt: 78 },
+        { name: "Oulujärvi", lat: 64.300, lon: 27.000, alt: 122 },
+        { name: "Inarijärvi", lat: 68.900, lon: 27.900, alt: 118 },
+        { name: "Näsijärvi", lat: 61.600, lon: 23.700, alt: 95 },
+        { name: "Pielinen", lat: 63.200, lon: 29.700, alt: 93 },
+
+        // --- COASTAL LOWLANDS ---
+        // Forces the edges to drop to sea level smoothly
+        { name: "Vaasa Coast", lat: 63.100, lon: 21.000, alt: 0 },
+        { name: "Kalajoki", lat: 64.200, lon: 23.900, alt: 0 },
+        { name: "Pori Coast", lat: 61.500, lon: 21.500, alt: 0 },
+        { name: "Kotka Coast", lat: 60.400, lon: 27.000, alt: 0 }
+    ];
+        // FMI Weather Stations with coordinates and altitude
+        const FMI_STATIONS = [
+            {name: "Utsjoki Kevo", lat: 69.76, lon: 27.01, alt: 107},
+            {name: "Utsjoki Nuorgam", lat: 70.08, lon: 27.90, alt: 14},
+            {name: "Inari Ivalo", lat: 68.61, lon: 27.41, alt: 126},
+            {name: "Sodankylä", lat: 67.37, lon: 26.63, alt: 179},
+            {name: "Muonio Sammaltunturi", lat: 67.97, lon: 24.12, alt: 565},
+            {name: "Kittilä", lat: 67.66, lon: 24.85, alt: 189},
+            {name: "Rovaniemi", lat: 66.58, lon: 25.83, alt: 198},
+            {name: "Kuusamo", lat: 65.99, lon: 29.24, alt: 263},
+            {name: "Enontekiö Kilpisjärvi", lat: 69.05, lon: 20.79, alt: 480},
+            {name: "Kolari Sieppijärvi", lat: 67.27, lon: 23.65, alt: 266},
+            {name: "Kemi", lat: 65.67, lon: 24.58, alt: 16},
+            {name: "Tornio", lat: 65.85, lon: 24.15, alt: 14},
+            {name: "Oulu", lat: 65.03, lon: 25.47, alt: 15},
+            {name: "Pudasjärvi", lat: 65.40, lon: 26.95, alt: 121},
+            {name: "Taivalkoski Taivalkoski", lat: 65.58, lon: 28.25, alt: 201},
+            {name: "Posio Livojoki", lat: 66.27, lon: 28.14, alt: 254},
+            {name: "Pelkosenniemi Pyhätunturi", lat: 67.02, lon: 27.20, alt: 467},
+            {name: "Raahe", lat: 64.68, lon: 24.56, alt: 9},
+            {name: "Ylivieska", lat: 64.08, lon: 24.74, alt: 83},
+            {name: "Haapajärvi", lat: 63.75, lon: 25.38, alt: 120},
+            {name: "Kajaani", lat: 64.29, lon: 27.69, alt: 140},
+            {name: "Sotkamo Kuolaniemi", lat: 64.13, lon: 28.37, alt: 161},
+            {name: "Kokkola", lat: 63.84, lon: 23.14, alt: 25},
+            {name: "Pietarsaari", lat: 63.69, lon: 22.69, alt: 15},
+            {name: "Vaasa", lat: 63.11, lon: 21.62, alt: 5},
+            {name: "Seinäjoki", lat: 62.79, lon: 22.83, alt: 94},
+            {name: "Lapua", lat: 62.97, lon: 23.00, alt: 46},
+            {name: "Ähtäri", lat: 62.55, lon: 24.22, alt: 154},
+            {name: "Jyväskylä", lat: 62.40, lon: 25.68, alt: 141},
+            {name: "Laukaa Laukaa lentokenttä", lat: 62.40, lon: 25.69, alt: 147},
+            {name: "Viitasaari Haapasalmi", lat: 63.09, lon: 25.86, alt: 111},
+            {name: "Iisalmi", lat: 63.56, lon: 27.03, alt: 121},
+            {name: "Kuopio", lat: 62.89, lon: 27.64, alt: 99},
+            {name: "Varkaus", lat: 62.32, lon: 27.87, alt: 86},
+            {name: "Joensuu", lat: 62.66, lon: 29.63, alt: 117},
+            {name: "Lieksa", lat: 63.32, lon: 30.79, alt: 126},
+            {name: "Ilomantsi", lat: 62.67, lon: 30.94, alt: 156},
+            {name: "Nurmes", lat: 63.84, lon: 29.14, alt: 117},
+            {name: "Kuhmo Lentiira", lat: 64.25, lon: 30.16, alt: 253},
+            {name: "Kristiinankaupunki", lat: 62.27, lon: 21.25, alt: 4},
+            {name: "Kaskinen", lat: 62.34, lon: 21.22, alt: 2},
+            {name: "Pori", lat: 61.46, lon: 21.80, alt: 13},
+            {name: "Rauma", lat: 61.13, lon: 21.49, alt: 4},
+            {name: "Tampere", lat: 61.51, lon: 23.60, alt: 116},
+            {name: "Kangasala", lat: 61.46, lon: 24.08, alt: 139},
+            {name: "Jämsä", lat: 61.86, lon: 25.18, alt: 94},
+            {name: "Mikkeli", lat: 61.69, lon: 27.20, alt: 95},
+            {name: "Savonlinna", lat: 61.87, lon: 28.94, alt: 88},
+            {name: "Lappeenranta", lat: 61.13, lon: 28.14, alt: 108},
+            {name: "Imatra", lat: 61.17, lon: 28.78, alt: 90},
+            {name: "Turku", lat: 60.51, lon: 22.26, alt: 7},
+            {name: "Parainen", lat: 60.30, lon: 22.30, alt: 4},
+            {name: "Salo Kärkkä", lat: 60.39, lon: 23.14, alt: 53},
+            {name: "Forssa", lat: 60.82, lon: 23.62, alt: 106},
+            {name: "Hämeenlinna", lat: 60.99, lon: 24.47, alt: 105},
+            {name: "Hyvinkää", lat: 60.65, lon: 24.88, alt: 125},
+            {name: "Lahti Laune", lat: 61.05, lon: 25.69, alt: 159},
+            {name: "Heinola", lat: 61.21, lon: 26.03, alt: 109},
+            {name: "Kouvola Anjala", lat: 60.70, lon: 26.82, alt: 58},
+            {name: "Kotka Rankki", lat: 60.47, lon: 26.95, alt: 4},
+            {name: "Hamina", lat: 60.57, lon: 27.19, alt: 4},
+            {name: "Hanko", lat: 59.84, lon: 22.95, alt: 6},
+            {name: "Inkoo", lat: 60.04, lon: 24.00, alt: 4},
+            {name: "Helsinki Kaisaniemi", lat: 60.18, lon: 24.94, alt: 4},
+            {name: "Helsinki Malmi", lat: 60.25, lon: 25.05, alt: 26},
+            {name: "Helsinki Vantaa", lat: 60.33, lon: 24.96, alt: 51},
+            {name: "Espoo Nuuksio", lat: 60.29, lon: 24.56, alt: 42},
+            {name: "Vihti Maasoja", lat: 60.43, lon: 24.54, alt: 103},
+            {name: "Porvoo Kilpilahti", lat: 60.31, lon: 25.54, alt: 7},
+            {name: "Loviisa Orrengrund", lat: 60.43, lon: 26.42, alt: 3},
+            {name: "Mariehamn", lat: 60.12, lon: 19.90, alt: 14},
+            {name: "Jomala Maarianhamina", lat: 60.12, lon: 19.90, alt: 14},
+            {name: "Parainen Utö", lat: 59.78, lon: 21.37, alt: 7},
+            {name: "Kemijärvi", lat: 66.71, lon: 27.22, alt: 223},
+            {name: "Ivalo Lentokenttä", lat: 68.61, lon: 27.41, alt: 126},
+            {name: "Salla", lat: 66.83, lon: 28.65, alt: 231},
+            {name: "Savukoski Tanhua", lat: 67.79, lon: 29.26, alt: 252},
+            {name: "Posio Riisitunturi", lat: 66.22, lon: 28.52, alt: 335},
+            {name: "Kittilä Pokka", lat: 67.82, lon: 25.15, alt: 302},
+            {name: "Muonio Muonio", lat: 67.96, lon: 23.68, alt: 243},
+            {name: "Enontekiö Hetta", lat: 68.36, lon: 23.65, alt: 335},
+            {name: "Enontekiö Näkkälä", lat: 68.71, lon: 23.14, alt: 384},
+            {name: "Kolari Palojoensuu", lat: 67.34, lon: 23.78, alt: 172},
+            {name: "Pello Juoksenki", lat: 66.79, lon: 24.13, alt: 173},
+            {name: "Ylitornio Meltosjärvi", lat: 66.51, lon: 24.43, alt: 176},
+            {name: "Keminmaa Lautiosaari", lat: 65.86, lon: 24.53, alt: 17},
+            {name: "Tervola Hirvaskoski", lat: 66.50, lon: 25.15, alt: 55},
+            {name: "Simo Maksniemi", lat: 65.66, lon: 25.06, alt: 5},
+            {name: "Ii Hamina", lat: 65.32, lon: 25.37, alt: 10},
+            {name: "Hailuoto Marjaniemi", lat: 65.04, lon: 24.71, alt: 6},
+            {name: "Liminka Tupos", lat: 64.81, lon: 25.41, alt: 6},
+            {name: "Lumijoki Varjakka", lat: 64.83, lon: 25.18, alt: 5},
+            {name: "Oulainen Pyhäsalmi", lat: 63.66, lon: 25.41, alt: 165},
+            {name: "Reisjärvi Reisjärvi", lat: 63.61, lon: 24.84, alt: 99},
+            {name: "Kalajoki Vasankari", lat: 64.21, lon: 23.96, alt: 18},
+            {name: "Siikajoki Ruukki", lat: 64.66, lon: 25.12, alt: 60},
+            {name: "Pyhäjoki Parhalahti", lat: 64.48, lon: 24.25, alt: 5},
+            {name: "Rautavaara", lat: 63.45, lon: 28.30, alt: 176},
+            {name: "Sonkajärvi", lat: 63.67, lon: 27.52, alt: 158},
+            {name: "Nilsiä Tahkovuori", lat: 63.31, lon: 27.99, alt: 261},
+            {name: "Vesanto", lat: 62.92, lon: 26.41, alt: 118},
+            {name: "Pieksämäki", lat: 62.30, lon: 27.21, alt: 93},
+            {name: "Juva", lat: 61.90, lon: 27.86, alt: 88},
+            {name: "Mäntyharju", lat: 61.42, lon: 26.88, alt: 102},
+            {name: "Pertunmaa", lat: 61.51, lon: 26.46, alt: 124},
+            {name: "Sysmä", lat: 61.50, lon: 25.69, alt: 137},
+            {name: "Padasjoki", lat: 61.35, lon: 25.28, alt: 125},
+            {name: "Asikkala", lat: 61.21, lon: 25.52, alt: 102},
+            {name: "Hollola", lat: 60.99, lon: 25.45, alt: 95},
+            {name: "Kärkölä", lat: 60.87, lon: 25.28, alt: 117},
+            {name: "Hausjärvi", lat: 60.79, lon: 24.94, alt: 111}
+        ];
+
+        const CONFIG = {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            years: Array.from({length: 36}, (_, i) => 1990 + i), // 1990-2025
+            gridSize: 90,
+            zSpacing: 22, 
+            topoUrl: "https://raw.githubusercontent.com/johan/world.geo.json/master/countries/FIN.geo.json",
+            wfsBase: "https://opendata.fmi.fi/wfs"
+        };
+
+        let scene, camera, renderer, controls;
+        let mapData = [];
+        let fmiStationData = {}; // {year: {snow: []}}
+        let fmiRawStationData = {}; // Complete raw measurements: {year: [{lat, lon, name, measurements: [{date, depth}]}]}
+        let fmiPreCalculatedSCD = {}; // Pre-calculated SCD for discrete hmin values: {year: {hmin: [{lat, lon, scd}]}}
+        const HMIN_VALUES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]; // Pre-calculated hmin thresholds (0-50 with step 5)
+        let consistentStations = []; // Stations available across all years
+        let temporalMesh;
+        let isAnimating = false;
+        let useHeightMapping = false;
+        let currentYearIdx = 0;
+        let currentMetric = 'mwd'; 
+        let currentHmin = 20; // Minimum snow depth threshold for SCD calculation (cm)
+        let animationFrame;
+        let yearSliderTimeout;
+        let geoProjection;
+        let yearLabelSprites = []; 
+        let heightAxisGroup = new THREE.Group();
+        let outlineGroup = new THREE.Group();
+        let animationBorderGroup = new THREE.Group();
+        let stationMarkersGroup = new THREE.Group(); 
+        
+        // Optimizing Interpolation: Store Weights
+        // Format: [ { x, y, elevation, weights: [ { stationIndex, weight } ] } ]
+        let gridWeights = [];
+        let allUniqueStations = [];
+
+        // Standard Top-Down Position for Animation
+        const TOP_VIEW_POS = { x: 0, y: 1200, z: 1 };
+        // Relief Position: Tilted side view from the left
+        const RELIEF_VIEW_POS = { x: -450, y: 700, z: 500 };
+
+        let colorScale;
+        
+        function updateColorScale() {
+            if (currentMetric === 'scd') {
+                colorScale = d3.scaleSequential(d3.interpolateRgbBasis(['#001a33', '#0d47a1', '#42a5f5', '#90caf9', '#e3f2fd', '#ffffff'])).domain([0, 60]);
+            } else {
+                colorScale = d3.scaleSequential(d3.interpolateRgbBasis(['#001a33', '#0d47a1', '#42a5f5', '#90caf9', '#e3f2fd', '#ffffff'])).domain([0, 100]);
+            }
+        }
+        
+        // Clean Memory function
+        function cleanMesh(mesh) {
+            if (!mesh) return;
+            scene.remove(mesh);
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach(m => m.dispose());
+                } else {
+                    mesh.material.dispose();
+                }
+            }
+        }
+
+        async function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020204);
+            
+            camera = new THREE.PerspectiveCamera(50, CONFIG.width / CONFIG.height, 1, 10000);
+            camera.position.set(650, 600, 1100);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(CONFIG.width, CONFIG.height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            updateColorScale();
+
+            scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(500, 1000, 500);
+            scene.add(sun);
+
+            try {
+                let finlandGeo;
+                const response = await fetch(CONFIG.topoUrl);
+                if (response.ok) finlandGeo = await response.json();
+                else throw new Error();
+                
+                // Store globally for map data regeneration
+                window.finlandGeoJson = finlandGeo;
+                
+                geoProjection = d3.geoMercator().center([26, 66]).scale(2200).translate([0, 0]);
+                createFinlandOutline(finlandGeo, geoProjection);
+                createTemporalAxis();
+                createGeoAxes();
+                createHeightAxis();
+                
+                // Fetch real data
+                await fetchAllFMIData();
+                
+                // IMPORTANT: Calculate grid weights once after data is loaded
+                preCalculateGridWeights(finlandGeo, geoProjection);
+                
+                generateMapData(); // Now uses fast pre-calculated weights
+                renderVisuals();
+
+                updateYearFromIndex(0);
+
+                document.getElementById('loading').style.opacity = '0';
+                setTimeout(() => document.getElementById('loading').remove(), 800);
+                
+                animateLoop();
+            } catch (err) {
+                console.error("Critical Error:", err);
+                document.getElementById('loading-text').innerText = "Error: FMI API Unavailable";
+                document.getElementById('loading-text').style.color = "red";
+            }
+        }
+
+        async function saveFMIDataToFile() {
+            try {
+                // Save processed data with pre-calculated SCD values (much smaller file)
+                const completeData = {
+                    processed: fmiStationData,
+                    hminValues: HMIN_VALUES, // Include which hmin values are pre-calculated
+                    metadata: {
+                        years: CONFIG.years,
+                        stationCount: consistentStations.length,
+                        generatedAt: new Date().toISOString(),
+                        note: 'SCD values pre-calculated for hmin: ' + HMIN_VALUES.join(', ') + ' cm'
+                    }
+                };
+                const dataStr = JSON.stringify(completeData, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'fmi_snow_data_cache.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                console.log('FMI data saved to file (optimized with pre-calculated SCD values)');
+            } catch (e) {
+                console.error('Error saving data:', e);
+            }
+        }
+
+        async function loadFMIDataFromFile() {
+            try {
+                const response = await fetch('fmi_snow_data_cache.json');
+                if (response.ok) {
+                    const data = await response.json();
+                    // New optimized format with pre-calculated SCD values
+                    if (data.processed && data.hminValues) {
+                        fmiStationData = data.processed;
+                        console.log('Loaded optimized FMI data from cache file (pre-calculated SCD values)');
+                        // Note: Don't call recalculateMetrics here - it needs gridWeights which aren't calculated yet
+                    } else if (data.processed) {
+                        // Legacy format
+                        fmiStationData = data.processed || data;
+                        console.log('Loaded FMI data from cache file (legacy format)');
+                    } else {
+                        fmiStationData = data;
+                        console.log('Loaded FMI data from cache file');
+                    }
+                    return true;
+                }
+            } catch (e) {
+                console.log('No cache file found, will fetch from API');
+            }
+            return false;
+        }
+
+        async function fetchAllFMIData() {
+            const loadingText = document.getElementById('loading-text');
+            const progressBar = document.getElementById('progress-fill');
+            const totalYears = CONFIG.years.length;
+            let completed = 0;
+
+            // Try loading from cache first
+            loadingText.innerText = "Checking for cached data...";
+            const cacheLoaded = await loadFMIDataFromFile();
+            
+            if (cacheLoaded) {
+                loadingText.innerText = "Loaded from cache!";
+                progressBar.style.width = '100%';
+                
+                // Update station count
+                const sampleYear = CONFIG.years[CONFIG.years.length-1];
+                const count = fmiStationData[sampleYear]?.snow?.length || 0;
+                document.getElementById('station-count').innerText = `${count} FMI Stations`;
+                
+                // Collect stations
+                collectAllStations();
+                return;
+            }
+
+            loadingText.innerText = "Fetching FMI Snow Data...";
+            console.log('Starting FMI data fetch for', totalYears, 'years');
+
+            // Fetch annual maximum snow depth for each year from all stations
+            for (const year of CONFIG.years) {
+                fmiStationData[year] = { snow: [] };
+                
+                try {
+                    // Query Jan-Feb only for faster data retrieval (peak snow months)
+                    // This significantly speeds up the API calls (2 months vs 7 months)
+                    const winterStart = `${year}-01-01T00:00:00Z`;
+                    const winterEnd = `${year}-02-28T23:59:59Z`;
+                    
+                    // For current year (2025), only query up to today
+                    const endDate = year === 2025 ? new Date().toISOString() : winterEnd;
+                    
+                    // Use timevaluepair format - easier to parse than multipointcoverage
+                    // Query snow depth observations across Finland
+                    const url = `${CONFIG.wfsBase}?service=WFS&version=2.0.0&request=GetFeature&storedquery_id=fmi::observations::weather::daily::timevaluepair&starttime=${winterStart}&endtime=${endDate}&parameters=snow&bbox=19,59,32,71`;
+                    
+                    console.log(`Fetching ${year}: ${url}`);
+                    
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const text = await response.text();
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(text, "text/xml");
+                    
+                    // Check for WFS exceptions
+                    const exception = xmlDoc.querySelector('ExceptionText');
+                    if (exception) {
+                        throw new Error(exception.textContent);
+                    }
+                    
+                    fmiStationData[year] = parseSnowDataFromXML(xmlDoc, year);
+                    console.log(`${year}: Found ${fmiStationData[year].snow.length} stations with data`);
+                    
+                } catch (e) {
+                    console.warn(`Error fetching ${year}:`, e.message);
+                    // Fallback to station-based synthetic data if API fails
+                    fmiStationData[year] = generateSyntheticSnowData(year);
+                    console.log(`${year}: Using synthetic data (${fmiStationData[year].snow.length} stations)`);
+                }
+                
+                completed++;
+                const percentage = (completed / totalYears) * 100;
+                progressBar.style.width = percentage + '%';
+                loadingText.innerText = `Loading ${year}... (${fmiStationData[year].snow.length} stations)`;
+            }
+            
+            const sampleYear = CONFIG.years[CONFIG.years.length-1];
+            const count = fmiStationData[sampleYear]?.snow?.length || 0;
+            document.getElementById('station-count').innerText = `${count} FMI Stations`;
+            console.log('Data fetch complete!');
+            
+            // Save data to cache file
+            saveFMIDataToFile();
+            
+            // Collect all unique station locations (no filtering)
+            collectAllStations();
+        }
+        
+        function collectAllStations() {
+            console.log('Collecting all station locations...');
+            
+            // Build a set of all unique station locations across all years
+            const stationMap = {};
+            
+            CONFIG.years.forEach(year => {
+                const yearStations = fmiStationData[year]?.snow || [];
+                yearStations.forEach(station => {
+                    const key = `${station.lat.toFixed(4)},${station.lon.toFixed(4)}`;
+                    if (!stationMap[key]) {
+                        stationMap[key] = {
+                            lat: station.lat,
+                            lon: station.lon
+                        };
+                    }
+                });
+            });
+            
+            consistentStations = Object.values(stationMap);
+            // Convert to array for index-based lookup in pre-calculation
+            allUniqueStations = consistentStations.map((s, i) => ({...s, id: i}));
+            console.log(`Found ${consistentStations.length} unique station locations across all years`);
+            
+            // Visualize station positions on the map
+            visualizeStationPositions();
+        }
+        
+        function visualizeStationPositions() {
+            if (stationMarkersGroup) scene.remove(stationMarkersGroup);
+            stationMarkersGroup = new THREE.Group();
+            stationMarkersGroup.name = "StationMarkersGroup";
+            stationMarkersGroup.visible = false; // Hidden by default
+            
+            // Store all station markers for all years
+            stationMarkersGroup.userData.yearMarkers = {};
+            
+            const markerGeometry = new THREE.SphereGeometry(3, 8, 8);
+            const markerMaterial = new THREE.MeshPhongMaterial({
+                color: 0xff6b35,
+                transparent: true,
+                opacity: 0.9,
+                emissive: 0xff6b35,
+                emissiveIntensity: 0.4
+            });
+            
+            // Create markers for each year
+            CONFIG.years.forEach((year, yearIdx) => {
+                const yearGroup = new THREE.Group();
+                yearGroup.visible = (yearIdx === currentYearIdx); // Only current year visible initially
+                
+                const yearStations = fmiStationData[year]?.snow || [];
+                
+                yearStations.forEach(station => {
+                    const [x, y] = geoProjection([station.lon, station.lat]);
+                    const marker = new THREE.Mesh(markerGeometry, markerMaterial.clone());
+                    
+                    // Calculate terrain elevation at this position
+                    const elevation = interpolateElevation([station.lon, station.lat]);
+                    marker.userData.baseY = 8;
+                    marker.userData.elevation = elevation;
+                    
+                    marker.position.set(x, 8, y);
+                    yearGroup.add(marker);
+                });
+                
+                stationMarkersGroup.userData.yearMarkers[yearIdx] = yearGroup;
+                stationMarkersGroup.add(yearGroup);
+            });
+            
+            scene.add(stationMarkersGroup);
+            console.log(`Added station markers for all years`);
+        }
+        
+        function updateStationPositions() {
+            if (!stationMarkersGroup || !stationMarkersGroup.userData.yearMarkers) return;
+            
+            // Show only current year's stations in animation mode
+            Object.keys(stationMarkersGroup.userData.yearMarkers).forEach(yearIdx => {
+                const yearGroup = stationMarkersGroup.userData.yearMarkers[yearIdx];
+                yearGroup.visible = (parseInt(yearIdx) === currentYearIdx);
+                
+                // Update station marker heights based on relief mode
+                yearGroup.children.forEach(marker => {
+                    if (useHeightMapping) {
+                        const elevationHeight = marker.userData.elevation * 0.1;
+                        marker.position.y = elevationHeight + 8;
+                    } else {
+                        marker.position.y = marker.userData.baseY;
+                    }
+                });
+            });
+        }
+
+        function parseSnowDataFromXML(xmlDoc, year) {
+            const stations = { snow: [] };
+            const rawStations = [];
+            
+            try {
+                // Parse timevaluepair format (BsWfsElement)
+                const members = xmlDoc.getElementsByTagNameNS("*", "member");
+                
+                if (members.length === 0) {
+                    console.warn(`No data members found for ${year}`);
+                    return generateSyntheticSnowData(year);
+                }
+                
+                // Group data by station and collect all measurements with dates
+                const stationData = {};
+                
+                for (let member of members) {
+                    try {
+                        // Get station location
+                        const positions = member.getElementsByTagNameNS("*", "pos");
+                        if (positions.length === 0) continue;
+                        
+                        const posText = positions[0].textContent.trim();
+                        const [latStr, lonStr] = posText.split(/\s+/);
+                        const lat = parseFloat(latStr);
+                        const lon = parseFloat(lonStr);
+                        
+                        if (isNaN(lat) || isNaN(lon)) continue;
+                        
+                        // Get station name
+                        const nameElems = member.getElementsByTagNameNS("*", "name");
+                        const stationName = nameElems.length > 0 ? nameElems[0].textContent : `Station_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+                        
+                        const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+                        if (!stationData[key]) {
+                            stationData[key] = { lat, lon, name: stationName, measurements: [], rawMeasurements: [] };
+                        }
+                        
+                        // Get time-value pairs for this station
+                        const measurements = member.getElementsByTagNameNS("*", "MeasurementTVP");
+                        
+                        for (let measurement of measurements) {
+                            const timeElem = measurement.getElementsByTagNameNS("*", "time");
+                            const valueElem = measurement.getElementsByTagNameNS("*", "value");
+                            if (valueElem.length === 0) continue;
+                            
+                            const snowVal = parseFloat(valueElem[0].textContent);
+                            const timeStr = timeElem.length > 0 ? timeElem[0].textContent : null;
+                            
+                            if (!isNaN(snowVal) && snowVal >= 0) {
+                                stationData[key].measurements.push(snowVal);
+                                stationData[key].rawMeasurements.push({
+                                    date: timeStr,
+                                    depth: snowVal
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        // Skip problematic entries
+                        continue;
+                    }
+                }
+                
+                // Store complete raw data WITHOUT any filtering
+                Object.values(stationData).forEach(station => {
+                    if (station.measurements.length === 0) return;
+                    
+                    // Store complete raw data with all measurements
+                    rawStations.push({
+                        lat: station.lat,
+                        lon: station.lon,
+                        name: station.name,
+                        measurements: station.rawMeasurements
+                    });
+                    
+                    // Calculate MWD (always the same)
+                    const mwd = station.measurements.reduce((a, b) => a + b, 0) / station.measurements.length;
+                    
+                    // Pre-calculate SCD for all discrete hmin values
+                    const scdValues = {};
+                    HMIN_VALUES.forEach(hmin => {
+                        scdValues[hmin] = station.measurements.filter(v => v >= hmin).length;
+                    });
+                    
+                    // Store current hmin value for display
+                    const scd = scdValues[currentHmin] || station.measurements.filter(v => v >= currentHmin).length;
+                    
+                    stations.snow.push({
+                        lat: station.lat,
+                        lon: station.lon,
+                        scd: scd,
+                        scdValues: scdValues, // Store all pre-calculated values
+                        mwd: Math.round(mwd * 10) / 10
+                    });
+                });
+                
+                // Store raw data globally
+                fmiRawStationData[year] = rawStations;
+                
+                console.log(`Parsed ${stations.snow.length} stations for ${year}`);
+                
+            } catch (e) {
+                console.error(`Error parsing XML for ${year}:`, e);
+            }
+            
+            // If parsing failed or no data, use synthetic fallback
+            if (stations.snow.length === 0) {
+                console.warn(`No valid data parsed for ${year}, using synthetic`);
+                return generateSyntheticSnowData(year);
+            }
+            
+            return stations;
+        }
+        
+        // PRE-CALCULATION OF WEIGHTS (Optimization)
+        // Instead of calculating distance every render, do it once.
+        function preCalculateGridWeights(geojson, projection) {
+            gridWeights = [];
+            const xRange = [-250, 250], yRange = [-450, 650];
+            const xStep = (xRange[1] - xRange[0]) / CONFIG.gridSize;
+            const yStep = (yRange[1] - yRange[0]) / CONFIG.gridSize;
+            
+            for (let i = 0; i <= CONFIG.gridSize; i++) {
+                for (let j = 0; j <= CONFIG.gridSize; j++) {
+                    const x = xRange[0] + i * xStep;
+                    const y = yRange[0] + j * yStep;
+                    const geoPos = projection.invert([x, y]);
+                    
+                    if (d3.geoContains(geojson, geoPos)) {
+                        const [lon, lat] = geoPos;
+                        
+                        // Calculate distance to ALL unique stations
+                        const distances = allUniqueStations.map((s, idx) => {
+                            const dLat = lat - s.lat;
+                            const dLon = lon - s.lon;
+                            const dist = Math.sqrt(dLat*dLat + dLon*dLon);
+                            return { idx, dist: dist < 0.01 ? 0.01 : dist };
+                        });
+                        
+                        // Keep top 8 nearest for interpolation
+                        distances.sort((a, b) => a.dist - b.dist);
+                        const nearest = distances.slice(0, 8);
+                        
+                        let weightSum = 0;
+                        const weights = nearest.map(n => {
+                            const w = 1 / (n.dist * n.dist);
+                            weightSum += w;
+                            return { idx: n.idx, w }; // Store station index and raw weight
+                        });
+                        
+                        // Normalize weights
+                        weights.forEach(w => w.w /= weightSum);
+                        
+                        const elevation = interpolateElevation(geoPos);
+                        gridWeights.push({ x, y, elevation, weights });
+                    }
+                }
+            }
+            console.log(`Pre-calculated weights for ${gridWeights.length} grid points`);
+        }
+        
+        function recalculateMetrics(hmin) {
+            // Fast update using pre-calculated SCD values (no interpolation needed - exact match)
+            currentHmin = hmin;
+            
+            CONFIG.years.forEach(year => {
+                if (!fmiStationData[year] || !fmiStationData[year].snow) return;
+                
+                // Update SCD values using pre-calculated data (exact match)
+                fmiStationData[year].snow.forEach(station => {
+                    if (!station.scdValues) return;
+                    
+                    // Direct lookup - no interpolation needed since we only use pre-calculated values
+                    station.scd = station.scdValues[hmin] || 0;
+                });
+            });
+            
+            console.log(`Updated SCD with hmin=${hmin}cm (pre-calculated value)`);
+            
+            // Regenerate interpolated map data with new metrics
+            generateMapData();
+            renderVisuals();
+        }
+        
+        function generateMapData() {
+            // Because weights are pre-calculated, this is now VERY fast
+            mapData = gridWeights.map(point => {
+                const timeline = CONFIG.years.map(year => {
+                    const yearStations = fmiStationData[year]?.snow;
+                    if (!yearStations || yearStations.length === 0) return { scd: 0, mwd: 0 };
+                    
+                    let scdSum = 0, mwdSum = 0, validWeights = 0;
+                    
+                    point.weights.forEach(w => {
+                        // Find if the station at this unique index exists in this year's data
+                        const stationRef = allUniqueStations[w.idx];
+                        // Find station in current year with roughly same coords (tolerant match)
+                        const s = yearStations.find(ys => 
+                            Math.abs(ys.lat - stationRef.lat) < 0.001 && 
+                            Math.abs(ys.lon - stationRef.lon) < 0.001
+                        );
+                        
+                        if (s) {
+                            scdSum += s.scd * w.w;
+                            mwdSum += s.mwd * w.w;
+                            validWeights += w.w;
+                        }
+                    });
+
+                    // Re-normalize if some stations were missing this year
+                    if (validWeights > 0) {
+                        return { scd: scdSum / validWeights, mwd: mwdSum / validWeights };
+                    }
+                    return { scd: 0, mwd: 0 };
+                });
+                return { ...point, timeline };
+            });
+        }
+        
+        function generateSyntheticSnowData(year) {
+            // Generate realistic snow data based on hardcoded station locations
+            const stations = { snow: [] };
+            const rawStations = [];
+            const yearProgress = (year - 1990) / 35; // Climate warming trend
+            
+            FMI_STATIONS.forEach(station => {
+                // Snow depth based on latitude and altitude
+                const latFactor = (station.lat - 60) / 10; // Northern stations get more snow
+                const altFactor = station.alt / 200; // Higher altitude = more snow
+                const warming = yearProgress * 15; // Decreasing snow over time
+                
+                // Base snow depth calculation
+                let snowDepth = 20 + (latFactor * 80) + (altFactor * 40) - warming;
+                
+                // Add some realistic variation
+                const seed = station.lat * 100 + station.lon * 50 + year;
+                const variation = Math.sin(seed) * 15;
+                snowDepth = Math.max(0, snowDepth + variation);
+                
+                // Generate synthetic daily measurements (60 days for Jan-Feb)
+                const syntheticMeasurements = [];
+                for (let day = 1; day <= 60; day++) {
+                    const dailyVariation = Math.sin(day * 0.3 + seed) * 10;
+                    const depth = Math.max(0, snowDepth + dailyVariation);
+                    syntheticMeasurements.push({
+                        date: `${year}-${day <= 31 ? '01' : '02'}-${String(day <= 31 ? day : day - 31).padStart(2, '0')}`,
+                        depth: Math.round(depth * 10) / 10
+                    });
+                }
+                
+                // Store raw synthetic data
+                rawStations.push({
+                    lat: station.lat,
+                    lon: station.lon,
+                    name: station.name,
+                    measurements: syntheticMeasurements
+                });
+                
+                // Calculate metrics from synthetic measurements
+                const measurements = syntheticMeasurements.map(m => m.depth);
+                const mwd = measurements.reduce((a, b) => a + b, 0) / measurements.length;
+                
+                // Pre-calculate SCD for all discrete hmin values
+                const scdValues = {};
+                HMIN_VALUES.forEach(hmin => {
+                    scdValues[hmin] = measurements.filter(v => v >= hmin).length;
+                });
+                
+                const scd = scdValues[currentHmin] || measurements.filter(v => v >= currentHmin).length;
+                
+                stations.snow.push({
+                    lat: station.lat,
+                    lon: station.lon,
+                    scd: scd,
+                    scdValues: scdValues,
+                    mwd: Math.round(mwd * 10) / 10
+                });
+            });
+            
+            // Store raw synthetic data
+            fmiRawStationData[year] = rawStations;
+            
+            return stations;
+        }
+
+    // Combine lists
+    const ALL_ELEVATION_POINTS = [...FMI_STATIONS, ...EXTRA_TERRAIN_POINTS];
+
+    function interpolateElevation(geoPos) {
+        const [lon, lat] = geoPos;
+
+        const distances = ALL_ELEVATION_POINTS.map(s => {
+            const dLat = lat - s.lat;
+            const dLon = lon - s.lon;
+            // Euclidean distance is fine for this projection
+            const dist = Math.sqrt(dLat*dLat + dLon*dLon);
+            return { alt: s.alt, dist: dist < 0.001 ? 0.001 : dist }; // Prevent divide by zero
+        });
+
+        // Sort and take top 15 neighbors (Increased from 8 for smoother terrain)
+        distances.sort((a, b) => a.dist - b.dist);
+        const nearest = distances.slice(0, 15);
+
+        let weightSum = 0;
+        let elevSum = 0;
+        
+        nearest.forEach(n => {
+            // Use power of 2.5 for slightly sharper peaks
+            const weight = 1 / Math.pow(n.dist, 2.5);
+            weightSum += weight;
+            elevSum += n.alt * weight;
+        });
+
+        return weightSum > 0 ? elevSum / weightSum : 0;
+    }
+
+        function createHeightAxis() {
+            if (heightAxisGroup) scene.remove(heightAxisGroup);
+            heightAxisGroup = new THREE.Group();
+            heightAxisGroup.name = "HeightAxis";
+            heightAxisGroup.visible = useHeightMapping;
+            
+            const axisX = -250, axisZ = 450; 
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x3b82f6 });
+
+            // Show elevation in meters (Finland's max is ~1300m)
+            const values = [0, 200, 400, 600, 800];
+            const suffix = ' m';
+            const maxHeight = 800 * 0.2; // Scale to match elevation rendering
+            
+            const linePoints = [new THREE.Vector3(axisX, 0, axisZ), new THREE.Vector3(axisX, maxHeight, axisZ)];
+            heightAxisGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(linePoints), lineMat));
+
+            values.forEach(v => {
+                const h = v * 0.2; // Height scaling to match rendering
+                const tickPts = [new THREE.Vector3(axisX, h, axisZ), new THREE.Vector3(axisX - 10, h, axisZ)];
+                heightAxisGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tickPts), lineMat));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = 128; canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.font = '28px Inter, sans-serif';
+                ctx.fillStyle = '#3b82f6';
+                ctx.textAlign = 'right';
+                ctx.fillText(v + suffix, 120, 40);
+                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+                sprite.position.set(axisX - 45, h, axisZ);
+                sprite.scale.set(40, 20, 1);
+                heightAxisGroup.add(sprite);
+            });
+
+            scene.add(heightAxisGroup);
+        }
+
+        function createGeoAxes() {
+            const axesGroup = new THREE.Group();
+            axesGroup.name = "GeoAxes";
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.4 });
+            const longitudes = [20, 22, 24, 26, 28, 30, 32];
+            const yRef = 500, xRef = -250; 
+
+            longitudes.forEach(lon => {
+                const [x, _] = geoProjection([lon, 60]); 
+                const canvas = document.createElement('canvas');
+                canvas.width = 128; canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.font = '32px Inter, sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.fillText(lon + '°E', 64, 40);
+                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.8 }));
+                sprite.position.set(x, 0, yRef + 30);
+                sprite.scale.set(40, 20, 1);
+                axesGroup.add(sprite);
+            });
+
+            const latitudes = [60, 62, 64, 66, 68, 70];
+            latitudes.forEach(lat => {
+                const [_, y] = geoProjection([26, lat]); 
+                const canvas = document.createElement('canvas');
+                canvas.width = 128; canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.font = '32px Inter, sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'right';
+                ctx.fillText(lat + '°N', 110, 40);
+                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.8 }));
+                sprite.position.set(xRef - 40, 0, y);
+                sprite.scale.set(40, 20, 1);
+                axesGroup.add(sprite);
+            });
+            scene.add(axesGroup);
+        }
+
+        function createTemporalAxis() {
+            const axisGroup = new THREE.Group();
+            axisGroup.name = "AxisGroup";
+            yearLabelSprites = []; 
+            const axisX = -320, axisZ = 0;
+            const points = [new THREE.Vector3(axisX, 50, axisZ), new THREE.Vector3(axisX, -CONFIG.years.length * CONFIG.zSpacing - 50, axisZ)];
+            axisGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.3 })));
+
+            CONFIG.years.forEach((year, idx) => {
+                if (year % 5 === 0 || idx === 0 || idx === CONFIG.years.length - 1) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256; canvas.height = 128;
+                    const ctx = canvas.getContext('2d');
+                    ctx.font = 'Bold 80px Inter, sans-serif';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(year, 128, 80);
+                    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0.8 }));
+                    sprite.position.set(axisX - 40, -idx * CONFIG.zSpacing, axisZ);
+                    sprite.scale.set(60, 30, 1);
+                    sprite.userData = { year: year, index: idx }; 
+                    yearLabelSprites.push(sprite);
+                    axisGroup.add(sprite);
+                }
+            });
+            scene.add(axisGroup);
+        }
+
+        function createFinlandOutline(geojson, projection) {
+            if(outlineGroup) scene.remove(outlineGroup);
+            outlineGroup = new THREE.Group();
+            outlineGroup.name = "OutlineGroup";
+
+            const material = new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.1 });
+            const features = geojson.features || [geojson];
+            features.forEach(feature => {
+                const coords = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
+                coords.forEach(polygon => polygon.forEach(ring => {
+                    const pts = ring.map(c => { const [x, y] = projection(c); return new THREE.Vector3(x, 0, y); });
+                    const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+                    for(let i = 0; i < CONFIG.years.length; i += 10) {
+                        const line = new THREE.Line(geometry, material);
+                        line.position.y = -i * CONFIG.zSpacing;
+                        line.userData = { isTop: i === 0 };
+                        outlineGroup.add(line);
+                    }
+                    
+                    // Add dashed bottom outline (at 2025 position)
+                    const bottomDashedMaterial = new THREE.LineDashedMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.15,
+                        dashSize: 8,
+                        gapSize: 6,
+                        linewidth: 1
+                    });
+                    const bottomLine = new THREE.Line(geometry.clone(), bottomDashedMaterial);
+                    bottomLine.computeLineDistances(); // Required for dashed lines
+                    bottomLine.position.y = -(CONFIG.years.length - 1) * CONFIG.zSpacing; // Bottom (2025)
+                    bottomLine.userData = { isBottom: true };
+                    outlineGroup.add(bottomLine);
+                }));
+            });
+            scene.add(outlineGroup);
+            
+            // Create dashed border for animation mode
+            createAnimationBorder(geojson, projection);
+        }
+
+        function createAnimationBorder(geojson, projection) {
+            if(animationBorderGroup) scene.remove(animationBorderGroup);
+            animationBorderGroup = new THREE.Group();
+            animationBorderGroup.name = "AnimationBorderGroup";
+            animationBorderGroup.visible = false; // Hidden by default
+
+            // Dashed, very transparent border for animation mode
+            const dashedMaterial = new THREE.LineDashedMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.15,
+                dashSize: 8,
+                gapSize: 6,
+                linewidth: 1
+            });
+            
+            const features = geojson.features || [geojson];
+            features.forEach(feature => {
+                const coords = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
+                coords.forEach(polygon => polygon.forEach(ring => {
+                    const pts = ring.map(c => { const [x, y] = projection(c); return new THREE.Vector3(x, 0, y); });
+                    const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+                    const line = new THREE.Line(geometry, dashedMaterial);
+                    line.computeLineDistances(); // Required for dashed lines
+                    line.position.y = 1; // Slightly above the ground plane
+                    animationBorderGroup.add(line);
+                }));
+            });
+            scene.add(animationBorderGroup);
+        }
+
+        function renderVisuals() {
+            cleanMesh(temporalMesh);
+
+            // Get appropriate threshold based on current metric
+            const threshold = currentMetric === 'scd' ? 0 : parseFloat(document.getElementById('mwdThresholdSlider').value);
+            updateLegend();
+
+            const instanceCount = mapData.length * CONFIG.years.length;
+            const material = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.8 });
+            const geometry = new THREE.BoxGeometry(2.2, 2.2, 2.2);
+            temporalMesh = new THREE.InstancedMesh(geometry, material, instanceCount);
+            
+            const matrix = new THREE.Matrix4(), color = new THREE.Color();
+            let idx = 0;
+
+            mapData.forEach(point => {
+                point.timeline.forEach((data, yearIdx) => {
+                    const val = data[currentMetric]; 
+                    const yPos = -yearIdx * CONFIG.zSpacing;
+                    
+                    let opacity = 1.0;
+                    if(isAnimating) {
+                        const dist = Math.abs(yearIdx - currentYearIdx);
+                        opacity = dist === 0 ? 1 : 0;
+                    }
+
+                    if (val >= threshold && opacity > 0) {
+                        const baseDepth = isAnimating ? 0 : yPos;
+                        let heightOffset = 0;
+                        if (useHeightMapping) {
+                            heightOffset = point.elevation * 0.1;
+                        }
+
+                        matrix.setPosition(point.x, baseDepth + heightOffset, point.y);
+                        temporalMesh.setMatrixAt(idx, matrix);
+                        color.set(colorScale(val));
+                        temporalMesh.setColorAt(idx, color);
+                    } else {
+                        matrix.setPosition(10000, 0, 0);
+                        temporalMesh.setMatrixAt(idx, matrix);
+                    }
+                    idx++;
+                });
+            });
+
+            temporalMesh.instanceMatrix.needsUpdate = true;
+            if(temporalMesh.instanceColor) temporalMesh.instanceColor.needsUpdate = true;
+
+            scene.add(temporalMesh);
+        }
+
+        function updateLegend() {
+            const g = document.getElementById('gradient'), t = document.getElementById('legendTitle');
+            const thresholdText = document.getElementById('legendThreshold');
+            updateColorScale();
+            
+            if (currentMetric === 'scd') {
+                t.innerText = 'Snow Cover Duration';
+                document.getElementById('legendMin').innerText = '0 days';
+                document.getElementById('legendMax').innerText = '60 days';
+                const hmin = parseInt(document.getElementById('hminSlider').value);
+                thresholdText.innerHTML = `Showing areas per year with number of days with snow depth ≥ <strong>${hmin} cm.</strong>`;
+            } else {
+                t.innerText = 'Mean Winter Depth';
+                document.getElementById('legendMin').innerText = '0 cm';
+                document.getElementById('legendMax').innerText = '100 cm';
+                const threshold = parseInt(document.getElementById('mwdThresholdSlider').value);
+                thresholdText.innerHTML = `Showing areas per year with average snow in Jan-Feb with depth ≥ <strong>${threshold} cm.</strong>`;
+            }
+            
+            g.style.background = 'linear-gradient(to right, #001a33, #0d47a1, #42a5f5, #90caf9, #e3f2fd, #ffffff)';
+        }
+
+        function toggleAnimationMode(active) {
+            isAnimating = active;
+            const overlay = document.getElementById('year-overlay');
+            const axis = scene.getObjectByName("AxisGroup");
+            const reliefContainer = document.getElementById('reliefToggleContainer');
+
+            if (active) {
+                overlay.style.display = 'block';
+                reliefContainer.style.display = 'flex';
+                document.getElementById('stationToggleContainer').style.display = 'flex';
+                document.getElementById('yearSliderContainer').style.display = 'block';
+                document.getElementById('stationCountContainer').style.display = 'flex'; 
+                if(axis) axis.visible = false;
+                
+                // Show dashed border in animation mode
+                if(animationBorderGroup) animationBorderGroup.visible = true;
+                
+                // Hide Deep Outlines
+                if(outlineGroup) {
+                    outlineGroup.children.forEach(child => {
+                        // In animation mode: hide bottom dashed outline, keep only top
+                        if (child.userData.isBottom) {
+                            child.visible = false; // Hide bottom dashed in animation
+                        } else if (child.userData.isTop) {
+                            child.visible = true;
+                        } else {
+                            child.visible = false;
+                        }
+                    });
+                }
+                
+                const target = useHeightMapping ? RELIEF_VIEW_POS : TOP_VIEW_POS;
+
+                gsap.to(camera.position, { 
+                    x: target.x, 
+                    y: target.y, 
+                    z: target.z, 
+                    duration: 1.5, 
+                    ease: "power2.inOut", 
+                    onUpdate: () => camera.lookAt(0,0,0),
+                    onComplete: () => { if (isAnimating) startPlayback(); }
+                });
+                gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5 });
+                renderVisuals();
+            } else {
+                overlay.style.display = 'none';
+                reliefContainer.style.display = 'none';
+                document.getElementById('stationToggleContainer').style.display = 'none';
+                document.getElementById('yearSliderContainer').style.display = 'none';
+                document.getElementById('stationCountContainer').style.display = 'none';
+                
+                useHeightMapping = false;
+                document.getElementById('heightToggle').checked = false;
+                if (heightAxisGroup) heightAxisGroup.visible = false;
+                
+                // Hide stations when exiting animation mode
+                if (stationMarkersGroup) stationMarkersGroup.visible = false;
+                document.getElementById('stationToggle').checked = false;
+
+                if(axis) axis.visible = true;
+                
+                // Hide dashed border when exiting animation mode
+                if(animationBorderGroup) animationBorderGroup.visible = false;
+                
+                // Show All Outlines
+                if(outlineGroup) {
+                    outlineGroup.children.forEach(child => child.visible = true);
+                }
+
+                stopPlayback();
+                
+                gsap.to(camera.position, { x: 650, y: 400, z: 900, duration: 1.5, ease: "power2.inOut" });
+                gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5, onComplete: renderVisuals });
+            }
+        }
+
+        function startPlayback() {
+            let lastUpdate = 0;
+            const play = (time) => {
+                if (!isAnimating) return;
+                if (time - lastUpdate > 300) { 
+                    currentYearIdx = (currentYearIdx + 1) % CONFIG.years.length;
+                    updateYearFromIndex(currentYearIdx);
+                    lastUpdate = time;
+                }
+                animationFrame = requestAnimationFrame(play);
+            };
+            animationFrame = requestAnimationFrame(play);
+        }
+
+        function stopPlayback() { cancelAnimationFrame(animationFrame); }
+
+        function updateYearFromIndex(idx) {
+            currentYearIdx = parseInt(idx);
+            const year = CONFIG.years[currentYearIdx];
+            document.getElementById('yearSlider').value = idx;
+            document.getElementById('activeYearLabel').innerText = year;
+            document.getElementById('year-overlay').innerText = year;
+            
+            // Update station count for current year
+            const yearStations = fmiStationData[year]?.snow || [];
+            document.getElementById('station-count').innerText = `${yearStations.length} FMI Stations`;
+            
+            yearLabelSprites.forEach(sprite => {
+                const isClosest = Math.abs(sprite.userData.year - year) <= 2;
+                if (isClosest) {
+                    sprite.material.color.set(0x3b82f6); 
+                    sprite.material.opacity = 1.0;
+                } else {
+                    sprite.material.color.set(0xffffff); 
+                    sprite.material.opacity = 0.8;
+                }
+            });
+            
+            // Update station positions to show current year's stations
+            updateStationPositions();
+            
+            renderVisuals();
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        document.getElementById('hminSlider').addEventListener('input', (e) => {
+            const hmin = parseInt(e.target.value);
+            document.getElementById('hminVal').innerText = hmin + ' cm';
+            if (Object.keys(fmiStationData).length > 0) recalculateMetrics(hmin);
+        });
+        
+        document.getElementById('mwdThresholdSlider').addEventListener('input', (e) => {
+            document.getElementById('mwdThresholdVal').innerText = e.target.value + ' cm';
+            renderVisuals();
+        });
+        
+        document.getElementById('metricSelector').addEventListener('change', (e) => {
+            currentMetric = e.target.value;
+            
+            // Show/hide appropriate slider and update threshold
+            if (currentMetric === 'scd') {
+                document.getElementById('hminSliderContainer').style.display = 'block';
+                document.getElementById('mwdThresholdContainer').style.display = 'none';
+                // Update current hmin from slider
+                currentHmin = parseInt(document.getElementById('hminSlider').value);
+                document.getElementById('hminVal').innerText = currentHmin + ' cm';
+            } else {
+                document.getElementById('hminSliderContainer').style.display = 'none';
+                document.getElementById('mwdThresholdContainer').style.display = 'block';
+                // Update threshold display
+                const threshold = document.getElementById('mwdThresholdSlider').value;
+                document.getElementById('mwdThresholdVal').innerText = threshold + ' cm';
+            }
+            
+            renderVisuals();
+        });
+        
+        document.getElementById('yearSlider').addEventListener('input', (e) => {
+            const idx = e.target.value;
+            const year = CONFIG.years[idx];
+            
+            // Update UI immediately for responsiveness
+            document.getElementById('activeYearLabel').innerText = year;
+            
+            // Debounce the expensive rendering
+            clearTimeout(yearSliderTimeout);
+            yearSliderTimeout = setTimeout(() => {
+                requestAnimationFrame(() => {
+                    updateYearFromIndex(idx);
+                });
+            }, 50);
+            
+            if (isAnimating) stopPlayback(); 
+        });
+        document.getElementById('animateToggle').addEventListener('change', (e) => {
+            toggleAnimationMode(e.target.checked);
+        });
+        document.getElementById('heightToggle').addEventListener('change', (e) => {
+            useHeightMapping = e.target.checked;
+            if (heightAxisGroup) heightAxisGroup.visible = useHeightMapping;
+            
+            // Update station positions for relief mode
+            updateStationPositions();
+            
+            if(isAnimating) {
+                const target = useHeightMapping ? RELIEF_VIEW_POS : TOP_VIEW_POS;
+                gsap.to(camera.position, { 
+                    x: target.x,
+                    y: target.y,
+                    z: target.z, 
+                    duration: 1.2,
+                    ease: "power2.inOut",
+                    onUpdate: () => camera.lookAt(0,0,0)
+                });
+            } else {
+                // In non-animation mode, move camera to show altitude axis when relief is enabled
+                if (useHeightMapping) {
+                    // Move to position in front of Finland (bottom), centered on altitude axis
+                    gsap.to(camera.position, { 
+                        x: -250,  // Aligned with altitude axis
+                        y: 400,   // Elevated view
+                        z: 650,   // Front position (bottom of Finland)
+                        duration: 1.2,
+                        ease: "power2.inOut",
+                        onUpdate: () => controls.update()
+                    });
+                }
+            }
+            renderVisuals();
+        });
+        
+        document.getElementById('stationToggle').addEventListener('change', (e) => {
+            if (stationMarkersGroup) {
+                stationMarkersGroup.visible = e.target.checked;
+            }
+        });
+
+        // Initialize slider positions on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Force hmin slider to 20
+            const hminSlider = document.getElementById('hminSlider');
+            hminSlider.value = 20;
+            document.getElementById('hminVal').innerText = '20 cm';
+            
+            // Set MWD threshold to 15
+            const mwdSlider = document.getElementById('mwdThresholdSlider');
+            mwdSlider.value = 15;
+            document.getElementById('mwdThresholdVal').innerText = '15 cm';
+        });
+
+        // Center view button - moves camera to top-down position
+        document.getElementById('centerView').addEventListener('click', () => {
+            gsap.to(camera.position, { 
+                x: TOP_VIEW_POS.x, 
+                y: TOP_VIEW_POS.y, 
+                z: TOP_VIEW_POS.z, 
+                duration: 1.5, 
+                ease: "power2.inOut",
+                onUpdate: () => camera.lookAt(0, 0, 0)
+            });
+            gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5 });
+        });
+
+        init();
+    </script>
+</body>
+</html>
