@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Finland 3D Climate Visualization - Real FMI Data</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -249,14 +249,108 @@
             border-style: solid;
             border-color: rgba(15, 15, 20, 0.95) transparent transparent transparent;
         }
+
+        /* ===========================================
+           --- RESPONSIVE / MOBILE OVERRIDES --- 
+           ===========================================
+           These styles trigger only on devices with width <= 768px (Phones/Tablets)
+           It reorganizes the absolute positioning to fit small screens perfectly.
+        */
+        @media screen and (max-width: 768px) {
+            /* 1. Resize Title */
+            #top-title {
+                font-size: 1rem;
+                top: 15px;
+                width: 90%;
+                text-align: center;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            /* 2. Move Control Panel to Bottom & Make Responsive */
+            #ui-layer {
+                top: auto !important; /* Override the fixed top position */
+                bottom: 30px;         /* Anchor to bottom */
+                left: 50% !important; /* Center horizontally */
+                transform: translateX(-50%);
+                width: 94%;           /* Nearly full width */
+                max-width: 400px;
+                display: flex;
+                justify-content: center;
+            }
+
+            .control-panel {
+                width: 100%;          /* Fill the new container */
+                padding: 16px;        /* Slightly tighter padding */
+                max-height: 45vh;     /* Ensure it doesn't cover too much if extended */
+                overflow-y: auto;     /* Scrollable on very short landscape screens */
+            }
+
+            /* 3. Adjust Legend to be smaller and stay top-right */
+            .legend {
+                top: 60px;            /* Push down below the title */
+                right: 10px;
+                width: 150px;         /* Narrower */
+                padding: 10px;
+                transform: scale(0.9); /* Scale down */
+                transform-origin: top right;
+            }
+
+            /* 4. Move Help Icon to Top-Left (was Bottom-Left) to avoid collision with Controls */
+            #help-icon {
+                bottom: auto;
+                top: 60px;
+                left: 10px;
+                width: 30px;
+                height: 30px;
+            }
+            
+            /* Adjust help tooltip direction for top-left position */
+            .help-tooltip {
+                bottom: auto;
+                top: 100%;
+                margin-top: 10px;
+                width: 280px; /* Narrower tooltip for mobile */
+            }
+            .help-tooltip::after {
+                top: auto;
+                bottom: 100%;
+                border-color: transparent transparent rgba(15, 15, 20, 0.95) transparent;
+            }
+
+            /* 5. Resize Year Overlay */
+            #year-overlay {
+                font-size: 4rem;
+                left: 20px;
+            }
+
+            /* 6. Center Citation at very bottom */
+            .citation {
+                width: 100%;
+                text-align: center;
+                bottom: 5px;
+                right: 0;
+                font-size: 8px;
+                pointer-events: none; /* Let clicks pass through empty space */
+            }
+            .citation a {
+                pointer-events: auto; /* Re-enable link clicks */
+            }
+            
+            /* 7. Loading Screen Text */
+            .loading-screen h1 {
+                font-size: 1.25rem; /* text-xl */
+                text-align: center;
+                padding: 0 20px;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <!-- Top Title -->
     <div id="top-title">Finland Jan-Feb Snow (1990-2025)</div>
     
-    <!-- Help Icon -->
     <div id="help-icon">
         <span>?</span>
         <div class="help-tooltip">
@@ -305,6 +399,7 @@
                             <strong>Mean Winter Snow Depth (MWD):</strong> Average snow depth in cm over whole Jan-Feb period.<br>
                             <em>Slider filters areas with MWD below the selected depth (cm).</em>
                         </span>
+                    
                     </span>
                 </label>
                 <select id="metricSelector" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-white text-sm cursor-pointer">
@@ -314,7 +409,6 @@
                 </select>
             </div>
 
-            <!-- SCD: Minimum Snow Depth (hmin) -->
             <div class="mb-4" id="hminSliderContainer" style="display: none;">
                 <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex justify-between">
                     H_min: Snow Depth (cm) <span id="hminVal" class="text-blue-400 font-mono">20 cm</span>
@@ -322,7 +416,6 @@
                 <input type="range" id="hminSlider" min="0" max="50" value="20" step="5" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
             </div>
             
-            <!-- MWD: Depth Threshold -->
             <div class="mb-4" id="mwdThresholdContainer">
                 <label class="block text-[10px] uppercase tracking-widest text-zinc-500 mb-2 flex justify-between">
                     Snow Depth Threshold [cm] <span id="mwdThresholdVal" class="text-blue-400 font-mono">15 cm</span>
@@ -359,13 +452,11 @@
             <span id="legendMax">100 cm</span>
         </div>
         
-        <!-- Threshold Info -->
         <div class="mb-3 pb-3 border-b border-white/10">
             <div class="text-[9px] uppercase tracking-widest text-zinc-500 mb-1">Display Filter</div>
             <div class="text-[10px] text-zinc-300" id="legendThreshold">Showing depth ≥ 5 cm</div>
         </div>
         
-        <!-- Relief Toggle: Only visible during Animation -->
         <div id="reliefToggleContainer" class="pt-3 border-t border-white/10 flex items-center justify-between">
             <span class="text-[9px] uppercase tracking-widest text-zinc-500">Show Relief</span>
             <label class="switch">
@@ -374,7 +465,6 @@
             </label>
         </div>
         
-        <!-- Station Toggle: Only visible during Animation -->
         <div id="stationToggleContainer" class="pt-3 border-t border-white/10 flex items-center justify-between" style="display: none;">
             <span class="text-[9px] uppercase tracking-widest text-zinc-500">Show Stations</span>
             <label class="switch">
